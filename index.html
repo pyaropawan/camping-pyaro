@@ -5,7 +5,7 @@
   <!-- Security policy (added in remediation). NOTE: on GitHub Pages only CSP and
        referrer can be set via <meta>. nosniff / X-Frame-Options / HSTS / Permissions-Policy
        are ignored as meta and need a real header layer (e.g. Cloudflare). See SECURITY_AUDIT_v2.md. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; frame-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data:; connect-src 'self' https://camping-ledger.design-14e.workers.dev/;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; frame-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data:; connect-src 'self' https://camping-ledger.design-14e.workers.dev;">
   <meta name="referrer" content="no-referrer">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -309,6 +309,22 @@
     button.primary{ transition:none; }
   }
   .js-hidden{ display:none !important; }
+
+.cur-row{ display:flex; align-items:center; gap:10px; margin:10px 0 2px; }
+.cur-row label{ font-size:12.5px; color:var(--muted); }
+.cat-chip{ display:inline-block; font-size:10.5px; font-weight:600; padding:1px 7px; border-radius:999px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14); color:var(--muted); vertical-align:middle; }
+#catSummary{ margin-top:14px; }
+.cat-sum-title,.settled-title{ font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:6px; }
+.cat-sum-row{ display:flex; justify-content:space-between; font-size:13px; padding:4px 0; border-bottom:1px dashed rgba(255,255,255,.07); }
+.cat-sum-total{ font-weight:700; border-bottom:none; margin-top:2px; }
+.settle-paid-btn{ margin-left:auto; font-size:11.5px; padding:4px 10px; border-radius:8px; border:1px solid var(--red); background:transparent; color:var(--red); cursor:pointer; }
+.settle-paid-btn:hover{ background:var(--red); color:#fff; }
+.settled-wrap{ margin-top:14px; padding-top:10px; border-top:1px solid rgba(255,255,255,.08); }
+.settled-item{ display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 0; color:var(--muted); }
+.settled-check{ color:#39d353; font-weight:700; }
+.settled-item .settle-amt{ margin-left:auto; }
+.settle-undo-btn{ background:transparent; border:none; color:var(--muted); cursor:pointer; font-size:13px; padding:2px 6px; }
+.settle-undo-btn:hover{ color:var(--red); }
 </style>
 </head>
 <body>
@@ -365,6 +381,17 @@
         <input type="text" id="descInput" placeholder="What was bought (e.g. firewood, groceries)">
         <input type="number" id="amountInput" placeholder="Amount" step="0.01" min="0" inputmode="decimal">
         <select id="paidByInput"><option value="">Paid by...</option></select>
+        <select id="categoryInput">
+          <option value="">Category…</option>
+          <option value="Food">🍽 Food</option>
+          <option value="Groceries">🛒 Groceries</option>
+          <option value="Gas">⛽ Gas</option>
+          <option value="Gear">🎒 Gear</option>
+          <option value="Lodging">⛺ Lodging</option>
+          <option value="Activities">🎣 Activities</option>
+          <option value="Drinks">🍺 Drinks</option>
+          <option value="Other">• Other</option>
+        </select>
       </div>
       <div class="split-block">
         <div class="split-toggle">
@@ -390,6 +417,7 @@
   <div class="card">
     <h2><span class="num">04</span> Camp Receipts <span class="tag" id="expenseCount">0</span></h2>
     <div id="receiptsList"><div class="empty">No expenses logged yet.</div></div>
+    <div id="catSummary"></div>
   </div>
 
   <div class="card">
@@ -403,7 +431,16 @@
   </div>
 
   <div class="card">
-    <h2><span class="num">07</span> Backup copy <span class="tag">export / import</span></h2>
+    <h2><span class="num">07</span> Export &amp; Print <span class="tag">spreadsheet / PDF</span></h2>
+    <div class="sub" style="margin-bottom:12px;">Download a spreadsheet of every expense and the settle-up, or open a clean printable summary you can save as PDF.</div>
+    <div class="sync-row">
+      <button class="ghost" id="csvBtn">⬇ Download CSV</button>
+      <button class="ghost" id="printBtn">🖨 Print / Save PDF</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="num">08</span> Backup copy <span class="tag">export / import</span></h2>
     <div class="sub" style="margin-bottom:12px;">The ledger already syncs live for everyone with the link. Use this only as a manual backup, or to recover if the shared copy ever needs restoring.</div>
     <div class="sync-row">
       <button class="ghost" id="exportBtn">Export code</button>
@@ -415,7 +452,7 @@
   </div>
 
   <div class="card" id="visitorLogCard" style="display:none;">
-    <h2><span class="num">08</span> Visitor Log <span class="tag leader-tag">edit access only</span></h2>
+    <h2><span class="num">09</span> Visitor Log <span class="tag leader-tag">edit access only</span></h2>
     <div class="sub" style="margin-bottom:12px;">Everyone who opens this link is recorded here, whether or not they enter a password.</div>
     <div id="visitorLogList"><div class="empty">No visits recorded yet.</div></div>
   </div>
@@ -433,7 +470,7 @@
 /* Storage = a Cloudflare Worker that checks the view/edit password on the server
    (see SETUP_CLOUDFLARE.md). EDIT the line below to YOUR Worker URL — and match it
    in the CSP connect-src up in <head>. */
-const WORKER_BASE = 'https://camping-ledger.design-14e.workers.dev/';
+const WORKER_BASE = 'https://camping-ledger.design-14e.workers.dev';
 const IP_LOOKUP_API = 'https://api.ipify.org?format=json';
 const COLLECT_IP = false;
 const SESSION_PASS_KEY = 'camping_pass';
@@ -463,6 +500,9 @@ let expenses = [];
 let groups = []; // [{ id, name, members: [names], poc }]
 let visits = []; // [{ ip, time }] — every page open, regardless of password
 let splitMode = 'equal';
+let currency = '$';
+let settlements = []; // [{id, from, to, amt, time, by}] recorded settle-up payments
+let pendingDeletedSettlementIds = new Set();
 let pendingPhotoTarget = null;
 let ledgerId = null;
 let remoteMode = true;
@@ -644,7 +684,9 @@ async function fetchRemote(isInitial){
     const level = body.level === 'edit' ? 'edit' : 'view';
     accessLevel = level; unlocked = level === 'edit'; isLeader = level === 'edit';
     const data = body.ledger || { campers:[], expenses:[], groups:[], visits:[] };
-    const json = JSON.stringify({ campers: data.campers, expenses: data.expenses, groups: data.groups });
+    currency = data.currency || '$';
+    if(Array.isArray(data.settlements)) settlements = data.settlements;
+    const json = JSON.stringify({ campers: data.campers, expenses: data.expenses, groups: data.groups, settlements: data.settlements, currency: data.currency });
     if(json !== lastRemoteJson){
       campers = (data.campers || []).map(c => typeof c === 'string' ? { name: c, photo: null } : c);
       expenses = data.expenses || [];
@@ -712,13 +754,20 @@ async function pushRemote(useBeacon){
         });
         if(visits.length > MAX_VISITS_STORED) visits = visits.slice(visits.length - MAX_VISITS_STORED);
       }
+
+      const settleMap = {};
+      (remoteData.settlements || []).forEach(x => { settleMap[x.id] = x; });
+      settlements.forEach(x => { settleMap[x.id] = x; });
+      pendingDeletedSettlementIds.forEach(id => delete settleMap[id]);
+      settlements = Object.values(settleMap);
     }
+    pendingDeletedSettlementIds.clear();
     pendingDeletedCamperNames.clear();
     pendingDeletedExpenseIds.clear();
     pendingDeletedGroupIds.clear();
     saveLocalCache();
 
-    const payload = { campers, expenses, groups, visits, lastModified: stampNow() };
+    const payload = { campers, expenses, groups, visits, settlements, currency, lastModified: stampNow() };
     const body = JSON.stringify(payload);
 
     if(useBeacon){
@@ -732,7 +781,7 @@ async function pushRemote(useBeacon){
       body
     });
     if(!res.ok) throw new Error('save failed (' + res.status + ')');
-    lastRemoteJson = JSON.stringify({ campers, expenses, groups });
+    lastRemoteJson = JSON.stringify({ campers, expenses, groups, settlements, currency });
     lastModified = payload.lastModified;
     renderLastChange();
     renderAll();
@@ -860,7 +909,9 @@ function bindUnlockForm(){
       expenses = data.expenses || [];
       groups = data.groups || [];
       if(Array.isArray(data.visits)) visits = data.visits;
-      lastRemoteJson = JSON.stringify({ campers, expenses, groups });
+      if(Array.isArray(data.settlements)) settlements = data.settlements;
+      currency = data.currency || '$';
+      lastRemoteJson = JSON.stringify({ campers, expenses, groups, settlements, currency });
       lastModified = data.lastModified || lastModified;
       saveLocalCache();
       setAccess(level);
@@ -1320,6 +1371,7 @@ function resetExpenseForm(){
   document.getElementById('descInput').value = '';
   document.getElementById('amountInput').value = '';
   document.getElementById('paidByInput').value = '';
+  document.getElementById('categoryInput').value = '';
   document.getElementById('quickSplitSelect').value = '';
   splitMode = 'equal';
   document.getElementById('splitEqualBtn').classList.add('active');
@@ -1341,6 +1393,7 @@ function startEditExpense(id){
   document.getElementById('descInput').value = e.description;
   document.getElementById('amountInput').value = e.amount;
   document.getElementById('paidByInput').value = e.paidBy;
+  document.getElementById('categoryInput').value = e.category || '';
 
   const shareVals = Object.values(e.shares);
   const isEqual = shareVals.length > 0 && shareVals.every(v => Math.abs(v - shareVals[0]) < 0.01) &&
@@ -1372,6 +1425,7 @@ document.getElementById('addExpenseBtn').addEventListener('click', () => {
   const desc = document.getElementById('descInput').value.trim();
   const amount = parseFloat(document.getElementById('amountInput').value);
   const paidBy = document.getElementById('paidByInput').value;
+  const cat = document.getElementById('categoryInput').value;
 
   if(!desc){ statusEl.textContent = 'Add a description for this expense.'; return; }
   if(!paidBy){ statusEl.textContent = 'Choose who paid.'; return; }
@@ -1397,7 +1451,7 @@ document.getElementById('addExpenseBtn').addEventListener('click', () => {
     });
     if(missing){ statusEl.textContent = 'Fill in a custom amount for every selected person.'; return; }
     if(Math.abs(total - amount) > 0.01){
-      statusEl.textContent = `Custom amounts total $${total.toFixed(2)}, but the expense is $${amount.toFixed(2)}. Adjust to match.`;
+      statusEl.textContent = `Custom amounts total ${currency}${total.toFixed(2)}, but the expense is ${currency}${amount.toFixed(2)}. Adjust to match.`;
       return;
     }
   }
@@ -1410,6 +1464,7 @@ document.getElementById('addExpenseBtn').addEventListener('click', () => {
         description: desc,
         amount: amount,
         paidBy: paidBy,
+        category: cat,
         shares: shares,
         editedBy: getDeviceLabel(),
         editedAt: new Date().toISOString()
@@ -1423,6 +1478,7 @@ document.getElementById('addExpenseBtn').addEventListener('click', () => {
       description: desc,
       amount: amount,
       paidBy: paidBy,
+      category: cat,
       shares: shares,
       date: new Date().toISOString(),
       addedBy: getDeviceLabel()
@@ -1430,6 +1486,7 @@ document.getElementById('addExpenseBtn').addEventListener('click', () => {
     document.getElementById('descInput').value = '';
     document.getElementById('amountInput').value = '';
     document.getElementById('quickSplitSelect').value = '';
+    document.getElementById('categoryInput').value = '';
     statusEl.textContent = '';
     clearDraft();
   }
@@ -1446,6 +1503,9 @@ document.getElementById('mobileAddBtn').addEventListener('click', () => {
   document.getElementById('expenseCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   setTimeout(() => document.getElementById('descInput').focus(), 400);
 });
+
+document.getElementById('csvBtn').addEventListener('click', downloadCSV);
+document.getElementById('printBtn').addEventListener('click', printSummary);
 
 function deleteExpense(id){
   if(!unlocked) return;
@@ -1476,18 +1536,30 @@ function renderReceipts(){
       <div class="receipt-left">
         ${avatarHtml(e.paidBy)}
         <div class="receipt-text">
-          <div class="receipt-desc">${escapeHtml(e.description)}</div>
+          <div class="receipt-desc">${escapeHtml(e.description)}${e.category ? ` <span class="cat-chip">${escapeHtml(e.category)}</span>` : ''}</div>
           <div class="receipt-meta">paid by ${escapeHtml(e.paidBy)} · ${escapeHtml(splitLabel)}</div>
           <div class="receipt-meta2">${metaLine}</div>
         </div>
       </div>
       <div class="receipt-actions">
-        <div class="receipt-amt">$${e.amount.toFixed(2)}</div>
+        <div class="receipt-amt">${currency}${e.amount.toFixed(2)}</div>
         ${unlocked ? `<button class="receipt-edit" onclick="startEditExpense('${e.id}')" title="Edit expense">✎</button>
         <button class="receipt-del" onclick="deleteExpense('${e.id}')" title="Delete expense">✕</button>` : ''}
       </div>
     </div>`;
   }).join('');
+  renderCatSummary();
+}
+
+function renderCatSummary(){
+  const el = document.getElementById('catSummary');
+  if(!el) return;
+  if(expenses.length === 0){ el.innerHTML = ''; return; }
+  const totals = {}; let grand = 0;
+  expenses.forEach(e => { const k = e.category || 'Uncategorized'; totals[k] = (totals[k]||0) + Number(e.amount||0); grand += Number(e.amount||0); });
+  const rows = Object.entries(totals).sort((a,b)=>b[1]-a[1]).map(([k,v]) =>
+    `<div class="cat-sum-row"><span>${escapeHtml(k)}</span><span>${currency}${v.toFixed(2)}</span></div>`).join('');
+  el.innerHTML = `<div class="cat-sum-title">Spending by category</div>${rows}<div class="cat-sum-row cat-sum-total"><span>Total</span><span>${currency}${grand.toFixed(2)}</span></div>`;
 }
 
 function computeBalances(){
@@ -1500,6 +1572,12 @@ function computeBalances(){
       if(balance[name] === undefined) balance[name] = 0;
       balance[name] -= share;
     });
+  });
+  settlements.forEach(x => {
+    if(balance[x.from] === undefined) balance[x.from] = 0;
+    if(balance[x.to] === undefined) balance[x.to] = 0;
+    balance[x.from] += Number(x.amt); // debtor paid -> owes less
+    balance[x.to]   -= Number(x.amt); // creditor received -> owed less
   });
   return balance;
 }
@@ -1514,6 +1592,33 @@ function getSettleIdentity(name){
     }
   }
   return { settleName: name, groupName: null };
+}
+
+function computeSettlements(){
+  const balance = computeBalances();
+  const aggregated = {};
+  Object.entries(balance).forEach(([name, v]) => {
+    const identity = getSettleIdentity(name);
+    aggregated[identity.settleName] = (aggregated[identity.settleName] || 0) + v;
+  });
+  const creditors = [], debtors = [];
+  Object.entries(aggregated).forEach(([name, v]) => {
+    if(v > 0.01) creditors.push({name, amt: v});
+    else if(v < -0.01) debtors.push({name, amt: -v});
+  });
+  creditors.sort((a,b) => b.amt - a.amt);
+  debtors.sort((a,b) => b.amt - a.amt);
+  const transactions = [];
+  let ci = 0, di = 0;
+  while(ci < creditors.length && di < debtors.length){
+    const c = creditors[ci], d = debtors[di];
+    const amt = Math.min(c.amt, d.amt);
+    if(amt > 0.01) transactions.push({ from: d.name, to: c.name, amt });
+    c.amt -= amt; d.amt -= amt;
+    if(c.amt <= 0.01) ci++;
+    if(d.amt <= 0.01) di++;
+  }
+  return transactions;
 }
 
 function renderBalances(){
@@ -1534,7 +1639,7 @@ function renderBalances(){
     return `
     <div class="balance-row">
       <div class="balance-left">${avatarHtml(c.name, true)} <div><span>${escapeHtml(c.name)}</span>${pocNote}</div></div>
-      <span class="balance-amt ${cls}">${label} $${Math.abs(v).toFixed(2)}</span>
+      <span class="balance-amt ${cls}">${label} ${currency}${Math.abs(v).toFixed(2)}</span>
     </div>`;
   }).join('');
 }
@@ -1545,42 +1650,9 @@ function renderSettle(){
     list.innerHTML = '<div class="empty">Nothing to settle yet.</div>';
     return;
   }
-  const balance = computeBalances();
+  const transactions = computeSettlements();
 
-  // Aggregate each camper's balance under their group's POC, if one is set,
-  // so one person per family handles the actual payment instead of everyone
-  // in that family settling separately.
-  const aggregated = {};
-  Object.entries(balance).forEach(([name, v]) => {
-    const identity = getSettleIdentity(name);
-    aggregated[identity.settleName] = (aggregated[identity.settleName] || 0) + v;
-  });
-
-  const creditors = [];
-  const debtors = [];
-  Object.entries(aggregated).forEach(([name, v]) => {
-    if(v > 0.01) creditors.push({name, amt: v});
-    else if(v < -0.01) debtors.push({name, amt: -v});
-  });
-  creditors.sort((a,b) => b.amt - a.amt);
-  debtors.sort((a,b) => b.amt - a.amt);
-
-  const transactions = [];
-  let ci = 0, di = 0;
-  while(ci < creditors.length && di < debtors.length){
-    const c = creditors[ci];
-    const d = debtors[di];
-    const amt = Math.min(c.amt, d.amt);
-    if(amt > 0.01){
-      transactions.push({ from: d.name, to: c.name, amt });
-    }
-    c.amt -= amt;
-    d.amt -= amt;
-    if(c.amt <= 0.01) ci++;
-    if(d.amt <= 0.01) di++;
-  }
-
-  if(transactions.length === 0){
+  if(transactions.length === 0 && (!settlements || settlements.length === 0)){
     list.innerHTML = '<div class="empty">Everyone is even — nothing owed.</div>';
     return;
   }
@@ -1598,9 +1670,90 @@ function renderSettle(){
       <span class="arrow">→</span>
       ${avatarHtml(t.to, true)}
       <span>${escapeHtml(t.to)}${pocLabel(t.to)}</span>
-      <span class="settle-amt">$${t.amt.toFixed(2)}</span>
+      <span class="settle-amt">${currency}${t.amt.toFixed(2)}</span>
+      ${unlocked ? `<button class="settle-paid-btn" onclick="markSettled('${escapeAttr(t.from)}','${escapeAttr(t.to)}',${t.amt})">Mark paid</button>` : ''}
     </div>
-  `).join('');
+  `).join('') + renderSettledPayments();
+}
+
+function renderSettledPayments(){
+  if(!settlements || settlements.length === 0) return '';
+  const items = [...settlements].sort((a,b)=> new Date(b.time)-new Date(a.time)).map(x => `
+    <div class="settled-item">
+      <span class="settled-check">✓</span>
+      <span>${escapeHtml(x.from)} → ${escapeHtml(x.to)}</span>
+      <span class="settle-amt">${currency}${Number(x.amt).toFixed(2)}</span>
+      ${unlocked ? `<button class="settle-undo-btn" onclick="unmarkSettled('${escapeAttr(x.id)}')" title="Undo">✕</button>` : ''}
+    </div>`).join('');
+  return `<div class="settled-wrap"><div class="settled-title">Marked as paid</div>${items}</div>`;
+}
+
+function markSettled(from, to, amt){
+  if(!unlocked) return;
+  settlements.push({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), from, to, amt: Number(amt), time: new Date().toISOString(), by: getDeviceLabel() });
+  pushRemote(); renderAll();
+}
+
+function unmarkSettled(id){
+  if(!unlocked) return;
+  settlements = settlements.filter(x => x.id !== id);
+  pendingDeletedSettlementIds.add(id);
+  pushRemote(); renderAll();
+}
+
+function csvCell(v){ v = (v==null?'':String(v)); return '"' + v.replace(/"/g,'""') + '"'; }
+function downloadCSV(){
+  const rows = [['Date','Item','Category','Paid by','Amount','Split among','Each owes']];
+  [...expenses].sort((a,b)=> new Date(a.date)-new Date(b.date)).forEach(e => {
+    const names = Object.keys(e.shares || {}).join('; ');
+    const each = Object.entries(e.shares || {}).map(([n,v]) => n+': '+currency+Number(v).toFixed(2)).join('; ');
+    const d = e.date ? new Date(e.date).toLocaleDateString() : '';
+    rows.push([d, e.description||'', e.category||'', e.paidBy||'', currency+Number(e.amount).toFixed(2), names, each]);
+  });
+  const bal = computeBalances();
+  rows.push([]); rows.push(['Balances']);
+  campers.forEach(c => { const v = bal[c.name]||0; rows.push([c.name, (v>=0?'is owed ':'owes ')+currency+Math.abs(v).toFixed(2)]); });
+  const tx = computeSettlements();
+  if(tx.length){ rows.push([]); rows.push(['Settle up (who pays whom)']); tx.forEach(t => rows.push([t.from+' -> '+t.to, currency+t.amt.toFixed(2)])); }
+  if(settlements.length){ rows.push([]); rows.push(['Marked as paid']); settlements.forEach(x => rows.push([x.from+' -> '+x.to, currency+Number(x.amt).toFixed(2)])); }
+  const csv = rows.map(r => r.map(csvCell).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'jumbo-camp-ledger.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+function printSummary(){
+  const esc = v => escapeHtml(String(v==null?'':v));
+  const total = expenses.reduce((sum,e)=> sum + Number(e.amount||0), 0);
+  const expRows = [...expenses].sort((a,b)=> new Date(a.date)-new Date(b.date)).map(e =>
+    `<tr><td>${e.date?new Date(e.date).toLocaleDateString():''}</td><td>${esc(e.description)}</td><td>${esc(e.category||'')}</td><td>${esc(e.paidBy)}</td><td class="r">${currency}${Number(e.amount).toFixed(2)}</td></tr>`).join('');
+  const bal = computeBalances();
+  const balRows = campers.map(c => { const v=bal[c.name]||0; return `<tr><td>${esc(c.name)}</td><td class="r">${v>=0?'is owed':'owes'} ${currency}${Math.abs(v).toFixed(2)}</td></tr>`; }).join('');
+  const settleRows = computeSettlements().map(t => `<tr><td>${esc(t.from)}</td><td>→</td><td>${esc(t.to)}</td><td class="r">${currency}${t.amt.toFixed(2)}</td></tr>`).join('');
+  const paidRows = settlements.map(x => `<tr><td>${esc(x.from)}</td><td>✓ paid</td><td>${esc(x.to)}</td><td class="r">${currency}${Number(x.amt).toFixed(2)}</td></tr>`).join('');
+  const w = window.open('', '_blank');
+  if(!w){ alert('Allow pop-ups to open the printable summary.'); return; }
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Jumbo Camp — ledger</title>'
+    + '<style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;margin:28px;color:#111}'
+    + 'h1{font-size:20px;margin:0 0 2px}.date{color:#666;font-size:12px;margin-bottom:18px}'
+    + 'h2{font-size:14px;margin:22px 0 8px;border-bottom:1px solid #ccc;padding-bottom:4px}'
+    + 'table{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:6px}'
+    + 'th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #eee}.r{text-align:right}'
+    + 'th{color:#555;font-weight:600}.tot{font-weight:700}'
+    + '@media print{button{display:none}}</style></head><body>'
+    + '<h1>Jumbo Camp — expense ledger</h1><div class="date">Generated '+new Date().toLocaleString()+'</div>'
+    + '<h2>Expenses</h2><table><thead><tr><th>Date</th><th>Item</th><th>Category</th><th>Paid by</th><th class="r">Amount</th></tr></thead><tbody>'
+    + (expRows||'<tr><td colspan="5">No expenses.</td></tr>')
+    + '</tbody><tfoot><tr class="tot"><td colspan="4">Total</td><td class="r">'+currency+total.toFixed(2)+'</td></tr></tfoot></table>'
+    + '<h2>Balances</h2><table><tbody>'+(balRows||'<tr><td>No campers.</td></tr>')+'</tbody></table>'
+    + (settleRows ? '<h2>Settle up</h2><table><tbody>'+settleRows+'</tbody></table>' : '')
+    + (paidRows ? '<h2>Marked as paid</h2><table><tbody>'+paidRows+'</tbody></table>' : '')
+    + '<button onclick="window.print()" style="margin-top:20px;padding:8px 16px;">Print</button>'
+    + '</body></html>');
+  w.document.close();
 }
 
 /* ---------- Draft autosave (protects against navigating away mid-entry) ---------- */
