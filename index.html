@@ -381,18 +381,9 @@
         <input type="text" id="descInput" placeholder="What was bought (e.g. firewood, groceries)">
         <input type="number" id="amountInput" placeholder="Amount" step="0.01" min="0" inputmode="decimal">
         <select id="paidByInput"><option value="">Paid by...</option></select>
-        <select id="categoryInput">
-          <option value="">Category…</option>
-          <option value="Food">🍽 Food</option>
-          <option value="Groceries">🛒 Groceries</option>
-          <option value="Gas">⛽ Gas</option>
-          <option value="Gear">🎒 Gear</option>
-          <option value="Lodging">⛺ Lodging</option>
-          <option value="Activities">🎣 Activities</option>
-          <option value="Drinks">🍺 Drinks</option>
-          <option value="Other">• Other</option>
-        </select>
+        <select id="categoryInput"><option value="">Category…</option></select>
       </div>
+      <input type="text" id="customCategoryInput" placeholder="Name your custom category, then Add expense" autocomplete="off" maxlength="30" style="display:none; width:100%; box-sizing:border-box; margin-bottom:12px;">
       <div class="split-block">
         <div class="split-toggle">
           <button id="splitEqualBtn" class="active">Split equally</button>
@@ -503,6 +494,42 @@ let splitMode = 'equal';
 let currency = '$';
 let settlements = []; // [{id, from, to, amt, time, by}] recorded settle-up payments
 let pendingDeletedSettlementIds = new Set();
+
+/* ---- Categories: presets + custom labels (custom ones are remembered from the
+   expenses themselves, so they sync to everyone and reappear in the dropdown) ---- */
+const PRESET_CATS = [
+  ['Food','🍽 Food'],['Groceries','🛒 Groceries'],['Gas','⛽ Gas'],['Gear','🎒 Gear'],
+  ['Lodging','⛺ Lodging'],['Activities','🎣 Activities'],['Drinks','🍺 Drinks'],['Other','• Other']
+];
+function getCustomCategories(){
+  const preset = new Set(PRESET_CATS.map(x => x[0]));
+  const seen = [];
+  expenses.forEach(e => { const c = (e.category||'').trim(); if(c && !preset.has(c) && !seen.includes(c)) seen.push(c); });
+  return seen.sort((a,b) => a.localeCompare(b));
+}
+function renderCategoryOptions(){
+  const sel = document.getElementById('categoryInput');
+  if(!sel) return;
+  const prev = sel.value;
+  let html = '<option value="">Category…</option>';
+  PRESET_CATS.forEach(([v,l]) => { html += `<option value="${escapeAttr(v)}">${escapeHtml(l)}</option>`; });
+  const customs = getCustomCategories();
+  if(customs.length){
+    html += '<optgroup label="Your categories">';
+    customs.forEach(c => { html += `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`; });
+    html += '</optgroup>';
+  }
+  html += '<option value="__custom__">➕ Add custom…</option>';
+  sel.innerHTML = html;
+  if(prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+function onCategoryChange(){
+  const sel = document.getElementById('categoryInput');
+  const box = document.getElementById('customCategoryInput');
+  if(!sel || !box) return;
+  if(sel.value === '__custom__'){ box.style.display = 'block'; box.focus(); }
+  else { box.style.display = 'none'; box.value = ''; }
+}
 let pendingPhotoTarget = null;
 let ledgerId = null;
 let remoteMode = true;
@@ -1034,6 +1061,7 @@ function renderAll(){
   document.getElementById('newGroupRow').style.display = isLeader ? 'flex' : 'none';
   document.getElementById('groupsLeaderNote').style.display = isLeader ? 'block' : 'none';
   document.getElementById('groupsTag').style.display = isLeader ? 'inline-block' : 'none';
+  renderCategoryOptions();
 }
 
 function renderCampers(){
@@ -1372,6 +1400,7 @@ function resetExpenseForm(){
   document.getElementById('amountInput').value = '';
   document.getElementById('paidByInput').value = '';
   document.getElementById('categoryInput').value = '';
+  { const _cc = document.getElementById('customCategoryInput'); if(_cc){ _cc.style.display='none'; _cc.value=''; } }
   document.getElementById('quickSplitSelect').value = '';
   splitMode = 'equal';
   document.getElementById('splitEqualBtn').classList.add('active');
@@ -1393,7 +1422,10 @@ function startEditExpense(id){
   document.getElementById('descInput').value = e.description;
   document.getElementById('amountInput').value = e.amount;
   document.getElementById('paidByInput').value = e.paidBy;
+  renderCategoryOptions();
   document.getElementById('categoryInput').value = e.category || '';
+  document.getElementById('customCategoryInput').style.display = 'none';
+  document.getElementById('customCategoryInput').value = '';
 
   const shareVals = Object.values(e.shares);
   const isEqual = shareVals.length > 0 && shareVals.every(v => Math.abs(v - shareVals[0]) < 0.01) &&
@@ -1425,7 +1457,8 @@ document.getElementById('addExpenseBtn').addEventListener('click', () => {
   const desc = document.getElementById('descInput').value.trim();
   const amount = parseFloat(document.getElementById('amountInput').value);
   const paidBy = document.getElementById('paidByInput').value;
-  const cat = document.getElementById('categoryInput').value;
+  let cat = document.getElementById('categoryInput').value;
+  if(cat === '__custom__'){ cat = document.getElementById('customCategoryInput').value.trim(); }
 
   if(!desc){ statusEl.textContent = 'Add a description for this expense.'; return; }
   if(!paidBy){ statusEl.textContent = 'Choose who paid.'; return; }
@@ -1487,6 +1520,8 @@ document.getElementById('addExpenseBtn').addEventListener('click', () => {
     document.getElementById('amountInput').value = '';
     document.getElementById('quickSplitSelect').value = '';
     document.getElementById('categoryInput').value = '';
+    document.getElementById('customCategoryInput').style.display = 'none';
+    document.getElementById('customCategoryInput').value = '';
     statusEl.textContent = '';
     clearDraft();
   }
@@ -1504,6 +1539,7 @@ document.getElementById('mobileAddBtn').addEventListener('click', () => {
   setTimeout(() => document.getElementById('descInput').focus(), 400);
 });
 
+document.getElementById('categoryInput').addEventListener('change', onCategoryChange);
 document.getElementById('csvBtn').addEventListener('click', downloadCSV);
 document.getElementById('printBtn').addEventListener('click', printSummary);
 
