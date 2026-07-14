@@ -65,6 +65,70 @@
     padding: calc(44px + env(safe-area-inset-top)) 18px calc(120px + env(safe-area-inset-bottom));
   }
   header{ margin-bottom: 24px; }
+
+  /* ---------- Dashboard layout (desktop / wide rectangular aspect) ----------
+     Above DASHBOARD_MIN, #mainContent becomes a CSS grid: campers/groups on
+     the left, the expense form + receipts feed in the center, balances/settle
+     on the right, export/backup/visitor-log along the bottom. Each card keeps
+     its existing id — only its grid position and internal scrolling changes,
+     so nothing in the JS needs to know layout changed. */
+  @media (min-width: 1000px){
+    .wrap{ max-width: 1480px; padding-left: 28px; padding-right: 28px; }
+    header{
+      display:flex; align-items:flex-end; justify-content:space-between; gap:24px;
+      margin-bottom:16px;
+    }
+    header .header-text{ max-width: 62ch; }
+    h1{ margin-bottom:8px; }
+    #mainContent{
+      display:grid;
+      grid-template-columns: 300px 1.35fr 340px;
+      grid-template-areas:
+        "admin    admin    admin"
+        "campers  expense  balances"
+        "groups   expense  settle"
+        "groups   receipts settle"
+        "export   receipts visitorlog"
+        "backup   receipts visitorlog";
+      gap: 16px;
+      align-items:start;
+    }
+    #mainContent .card{ margin-bottom:0; }
+    #archiveBanner{ grid-column: 1 / -1; margin-bottom:0; }
+    .area-admin{ grid-area: admin; }
+    .area-campers{ grid-area: campers; }
+    .area-groups{ grid-area: groups; display:flex; flex-direction:column; min-height:0; }
+    .area-expense{ grid-area: expense; }
+    .area-receipts{ grid-area: receipts; display:flex; flex-direction:column; min-height:0; }
+    .area-balances{ grid-area: balances; }
+    .area-settle{ grid-area: settle; display:flex; flex-direction:column; min-height:0; }
+    .area-export{ grid-area: export; }
+    .area-backup{ grid-area: backup; }
+    .area-visitorlog{ grid-area: visitorlog; display:flex; flex-direction:column; min-height:0; }
+    .area-footer{ grid-column: 1 / -1; }
+
+    /* Panels that can grow long get an internal scrollbar instead of
+       stretching the whole dashboard taller — this is what keeps the page
+       reading as a bounded rectangle rather than a long scroll. */
+    #receiptsList{ max-height: 46vh; overflow-y:auto; padding-right:4px; }
+    #balancesList{ max-height: 220px; overflow-y:auto; padding-right:4px; }
+    #settleList{ max-height: 320px; overflow-y:auto; padding-right:4px; }
+    #groupsList{ max-height: 260px; overflow-y:auto; padding-right:4px; }
+    #visitorLogList{ max-height: 300px; overflow-y:auto; padding-right:4px; }
+    .mobile-bar{ display:none !important; }
+  }
+  @media (min-width: 1000px) and (min-height: 760px){
+    .wrap{ padding-top: calc(28px + env(safe-area-inset-top)); }
+  }
+  /* Thin, unobtrusive scrollbars for the internal panel scroll areas */
+  @media (min-width: 1000px){
+    #receiptsList::-webkit-scrollbar, #balancesList::-webkit-scrollbar,
+    #settleList::-webkit-scrollbar, #groupsList::-webkit-scrollbar,
+    #visitorLogList::-webkit-scrollbar{ width:6px; }
+    #receiptsList::-webkit-scrollbar-thumb, #balancesList::-webkit-scrollbar-thumb,
+    #settleList::-webkit-scrollbar-thumb, #groupsList::-webkit-scrollbar-thumb,
+    #visitorLogList::-webkit-scrollbar-thumb{ background: var(--line); border-radius:4px; }
+  }
   .brandmark{
     font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase;
     color: var(--muted); margin-bottom:18px; display:flex; align-items:center; gap:10px;
@@ -355,10 +419,12 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brandmark"><span class="dot"></span>PYARO STUDIO — INTERNAL TOOL</div>
-    <div class="eyebrow">— A shared ledger for one trip</div>
-    <h1>Jumbo Camp</h1>
-    <div class="sub">Log who bought what, and this works out exactly who owes who — settled in the fewest payments possible. This ledger is private: enter the view password to see it, or the edit password to make changes.</div>
+    <div class="header-text">
+      <div class="brandmark"><span class="dot"></span>PYARO STUDIO — INTERNAL TOOL</div>
+      <div class="eyebrow">— A shared ledger for one trip</div>
+      <h1>Jumbo Camp</h1>
+      <div class="sub">Log who bought what, and this works out exactly who owes who — settled in the fewest payments possible. This ledger is private: enter the view password to see it, or the edit password to make changes.</div>
+    </div>
   </header>
 
   <div class="status-bar">
@@ -381,7 +447,7 @@
     <span>🗄 <b>This camp is archived.</b> <span id="archiveMeta"></span></span>
   </div>
 
-  <div class="card" id="adminCard" style="display:none;">
+  <div class="card area-admin" id="adminCard" style="display:none;">
     <h2><span class="num">00</span> Admin <span class="tag leader-tag">edit access</span></h2>
     <div class="sub" style="margin-bottom:12px;">Archiving freezes this camp and hides it from anyone without edit (admin) access. Nothing is deleted — you can unarchive any time.</div>
     <div class="sync-row">
@@ -389,7 +455,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div class="card area-campers">
     <h2><span class="num">01</span> Campers <span class="tag" id="camperCount">0</span></h2>
     <div class="campers-row" id="campersRow"></div>
     <div class="add-row" id="addCamperRow">
@@ -399,7 +465,7 @@
     <input type="file" id="photoFileInput" accept="image/*" style="display:none">
   </div>
 
-  <div class="card" id="groupsCard">
+  <div class="card area-groups" id="groupsCard">
     <h2><span class="num">02</span> Groups <span class="tag leader-tag" id="groupsTag">edit access</span></h2>
     <div id="groupsLeaderNote" class="leader-only-note" style="display:none;">
       With the edit password, you can create sub-groups (e.g. "Tent A", "Kitchen Crew") and reassign who's in each — handy if the trip splits up. Anyone with view access can use a group as a shortcut when logging an expense.
@@ -411,7 +477,7 @@
     <div id="groupsList"><div class="empty">No groups yet. Everyone splits together by default.</div></div>
   </div>
 
-  <div class="card" id="expenseCard">
+  <div class="card area-expense" id="expenseCard">
     <h2><span class="num">03</span> Log a Purchase <span class="tag" id="expenseFormTag">expense</span></h2>
     <div id="expenseForm">
       <div class="form-grid">
@@ -446,23 +512,23 @@
     </div>
   </div>
 
-  <div class="card">
+  <div class="card area-receipts">
     <h2><span class="num">04</span> Camp Receipts <span class="tag" id="expenseCount">0</span></h2>
     <div id="receiptsList"><div class="empty">No expenses logged yet.</div></div>
     <div id="catSummary"></div>
   </div>
 
-  <div class="card">
+  <div class="card area-balances">
     <h2><span class="num">05</span> Balances <span class="tag">who's up, who's down</span></h2>
     <div id="balancesList"><div class="empty">Add campers and expenses to see balances.</div></div>
   </div>
 
-  <div class="card">
+  <div class="card area-settle">
     <h2><span class="num">06</span> Settle Up <span class="tag">minimum transactions</span></h2>
     <div id="settleList"><div class="empty">Nothing to settle yet.</div></div>
   </div>
 
-  <div class="card">
+  <div class="card area-export">
     <h2><span class="num">07</span> Export &amp; Print <span class="tag">spreadsheet / PDF</span></h2>
     <div class="sub" style="margin-bottom:12px;">Download a spreadsheet of every expense and the settle-up, open a clean printable summary, or save the full page — with photos and colors — as a PDF.</div>
     <div class="sync-row">
@@ -472,7 +538,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div class="card area-backup">
     <h2><span class="num">08</span> Backup copy <span class="tag">export / import</span></h2>
     <div class="sub" style="margin-bottom:12px;">The ledger already syncs live for everyone with the link. Use this only as a manual backup, or to recover if the shared copy ever needs restoring.</div>
     <div class="sync-row">
@@ -484,13 +550,13 @@
     <div class="status-msg" id="syncStatus"></div>
   </div>
 
-  <div class="card" id="visitorLogCard" style="display:none;">
+  <div class="card area-visitorlog" id="visitorLogCard" style="display:none;">
     <h2><span class="num">09</span> Visitor Log <span class="tag leader-tag">edit access only</span><button class="collapse-btn" id="visitorLogCollapseBtn">▸ Expand</button></h2>
     <div class="sub" style="margin-bottom:12px;">Everyone who opens this link is recorded here, whether or not they enter a password.</div>
     <div id="visitorLogList" class="js-hidden"><div class="empty">No visits recorded yet.</div></div>
   </div>
 
-  <div class="footer-mark">jumbo camp · pyaro studio · private</div>
+  <div class="footer-mark area-footer">jumbo camp · pyaro studio · private</div>
   </div>
 </div>
 
