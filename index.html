@@ -18,6 +18,7 @@
 <!-- SUPPLY-CHAIN: self-host this file (commit html2canvas.min.js and use src="html2canvas.min.js"),
      then remove cdnjs from the CSP script-src above. Otherwise add integrity="sha384-...". -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
   :root{
     --bg: #0B0B0D;
@@ -101,6 +102,7 @@
   .lock-badge.locked{ color: var(--muted); }
   .lock-badge.unlocked{ color: var(--owed); border-color: rgba(127,169,127,0.4); }
   .lock-badge.leader{ color: var(--gold); border-color: rgba(212,162,76,0.5); }
+  .lock-badge.archived-badge{ color: var(--red); border-color: rgba(193,68,46,0.5); }
   .lock-form{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
   /* setup has two inputs + a button: stack them so the button is always tappable */
   .setup-form{ flex-direction:column; align-items:stretch; width:100%; max-width:320px; }
@@ -143,6 +145,11 @@
   }
   .card h2 .tag.editing{ color: var(--gold); border-color: rgba(212,162,76,0.4); }
   .card h2 .tag.leader-tag{ color: var(--gold); border-color: rgba(212,162,76,0.4); }
+  .card h2 .collapse-btn{
+    margin-left:auto; background:none; border:1px solid var(--line); color:var(--muted);
+    border-radius:8px; padding:4px 10px; font-size:12px; cursor:pointer; font-family:'JetBrains Mono',monospace;
+  }
+  .card h2 .collapse-btn:hover{ border-color: var(--gold); color: var(--gold); }
 
   .avatar{
     width:30px; height:30px; border-radius:50%; object-fit:cover; flex-shrink:0;
@@ -198,6 +205,7 @@
   }
   button.ghost:hover{ border-color: var(--gold); color: var(--gold); }
   button.ghost.small{ min-height:36px; padding:7px 12px; font-size:12.5px; }
+  button.ghost.danger:hover{ border-color: var(--red); color: var(--red); }
   .form-actions{ display:flex; gap:10px; flex-wrap:wrap; }
 
   .form-grid{ display:grid; grid-template-columns: 1.4fr 0.9fr 1fr; gap:10px; margin-bottom:12px; }
@@ -219,9 +227,14 @@
   .split-person input[type=checkbox]{ accent-color: var(--red); width:18px; height:18px; }
   .split-person input[type=number]{ width:74px; padding:6px 8px; font-size:13px; min-height:auto; }
 
+  .note-field{ margin-bottom:14px; }
+  .note-field label{
+    display:block; font-size:12.5px; color:var(--muted); font-family:'JetBrains Mono',monospace; margin-bottom:6px;
+  }
+
   .receipt{
     display:flex; justify-content:space-between; align-items:center;
-    padding:13px 0; border-bottom:1px solid var(--line); gap:10px;
+    padding:13px 0; border-bottom:1px solid var(--line); gap:10px; flex-wrap:wrap;
   }
   .receipt:last-child{ border-bottom:none; }
   .receipt-left{ display:flex; align-items:center; gap:10px; min-width:0; }
@@ -231,12 +244,17 @@
   .receipt-meta2{ font-size:11px; color:#6e6b66; font-family:'JetBrains Mono',monospace; }
   .receipt-amt{ font-family:'JetBrains Mono', monospace; font-size:15px; font-weight:600; color:var(--gold); white-space:nowrap; }
   .receipt-actions{ display:flex; align-items:center; flex-shrink:0; gap:4px; }
-  .receipt-edit, .receipt-del{
+  .receipt-edit, .receipt-del, .receipt-note-btn{
     background:none;border:none;color:var(--muted); cursor:pointer; font-size:14px; opacity:0.65;
     min-width:32px; min-height:32px;
   }
   .receipt-edit:hover{ color: var(--gold); opacity:1; }
   .receipt-del:hover{ color: var(--red); opacity:1; }
+  .receipt-note-btn:hover{ color: var(--owed); opacity:1; }
+  .receipt-note{
+    width:100%; margin-top:2px; padding:10px 12px; background: var(--bg-2); border:1px solid var(--line);
+    border-radius:10px; font-size:12.5px; color: var(--text); line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere;
+  }
   .empty{ color:var(--muted); font-size:13px; font-style:italic; padding:8px 0; }
 
   .balance-row{
@@ -295,6 +313,13 @@
     margin-bottom:12px; line-height:1.5;
   }
 
+  .archive-banner{
+    background: var(--red-dim); border:1px solid rgba(193,68,46,0.4); border-radius:14px;
+    padding:14px 16px; margin-bottom:18px; font-size:13px; color: var(--text);
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  }
+  .archive-banner b{ color: var(--red); }
+
   @media (max-width: 640px){
     .form-grid{ grid-template-columns: 1fr; }
     .add-row{ flex-direction:column; }
@@ -352,6 +377,18 @@
   </div>
 
   <div id="mainContent" class="js-hidden">
+  <div id="archiveBanner" class="archive-banner js-hidden">
+    <span>🗄 <b>This camp is archived.</b> <span id="archiveMeta"></span></span>
+  </div>
+
+  <div class="card" id="adminCard" style="display:none;">
+    <h2><span class="num">00</span> Admin <span class="tag leader-tag">edit access</span></h2>
+    <div class="sub" style="margin-bottom:12px;">Archiving freezes this camp and hides it from anyone without edit (admin) access. Nothing is deleted — you can unarchive any time.</div>
+    <div class="sync-row">
+      <button class="ghost" id="archiveToggleBtn">🗄 Archive this camp</button>
+    </div>
+  </div>
+
   <div class="card">
     <h2><span class="num">01</span> Campers <span class="tag" id="camperCount">0</span></h2>
     <div class="campers-row" id="campersRow"></div>
@@ -384,6 +421,10 @@
         <select id="categoryInput"><option value="">Category…</option></select>
       </div>
       <input type="text" id="customCategoryInput" placeholder="Name your custom category, then Add expense" autocomplete="off" maxlength="30" style="display:none; width:100%; box-sizing:border-box; margin-bottom:12px;">
+      <div class="note-field">
+        <label for="noteInput">Detail note (optional)</label>
+        <textarea id="noteInput" rows="2" placeholder="Any extra detail — receipt number, what it covered, why it was split this way..." maxlength="2000"></textarea>
+      </div>
       <div class="split-block">
         <div class="split-toggle">
           <button id="splitEqualBtn" class="active">Split equally</button>
@@ -423,10 +464,11 @@
 
   <div class="card">
     <h2><span class="num">07</span> Export &amp; Print <span class="tag">spreadsheet / PDF</span></h2>
-    <div class="sub" style="margin-bottom:12px;">Download a spreadsheet of every expense and the settle-up, or open a clean printable summary you can save as PDF.</div>
+    <div class="sub" style="margin-bottom:12px;">Download a spreadsheet of every expense and the settle-up, open a clean printable summary, or save the full page — with photos and colors — as a PDF.</div>
     <div class="sync-row">
       <button class="ghost" id="csvBtn">⬇ Download CSV</button>
-      <button class="ghost" id="printBtn">🖨 Print / Save PDF</button>
+      <button class="ghost" id="printBtn">🖨 Print / Save PDF (summary)</button>
+      <button class="ghost" id="fullPdfBtn">🖼 Save full page as PDF</button>
     </div>
   </div>
 
@@ -443,9 +485,9 @@
   </div>
 
   <div class="card" id="visitorLogCard" style="display:none;">
-    <h2><span class="num">09</span> Visitor Log <span class="tag leader-tag">edit access only</span></h2>
+    <h2><span class="num">09</span> Visitor Log <span class="tag leader-tag">edit access only</span><button class="collapse-btn" id="visitorLogCollapseBtn">▸ Expand</button></h2>
     <div class="sub" style="margin-bottom:12px;">Everyone who opens this link is recorded here, whether or not they enter a password.</div>
-    <div id="visitorLogList"><div class="empty">No visits recorded yet.</div></div>
+    <div id="visitorLogList" class="js-hidden"><div class="empty">No visits recorded yet.</div></div>
   </div>
 
   <div class="footer-mark">jumbo camp · pyaro studio · private</div>
@@ -479,6 +521,7 @@ const LOCAL_LEDGER_KEY = 'jumbocamp_ledger_id';
 const DEVICE_FALLBACK_KEY = 'jumbocamp_device_fallback_id';
 const DEVICE_ID_KEY = 'jumbocamp_device_uuid';
 const DRAFT_KEY = 'jumbocamp_draft_expense';
+const VISITOR_LOG_COLLAPSE_KEY = 'jumbocamp_visitorlog_collapsed';
 const POLL_MS = 20000;
 const MAX_VISITS_STORED = 300;
 
@@ -494,6 +537,11 @@ let splitMode = 'equal';
 let currency = '$';
 let settlements = []; // [{id, from, to, amt, time, by}] recorded settle-up payments
 let pendingDeletedSettlementIds = new Set();
+/* Archive state: freezes the whole camp and hides it from anyone without
+   edit (admin) access. Nothing is deleted — unarchiving restores full view. */
+let archived = false;
+let archivedAt = null;
+let archivedBy = null;
 
 /* ---- Categories: presets + custom labels (custom ones are remembered from the
    expenses themselves, so they sync to everyone and reappear in the dropdown) ---- */
@@ -713,7 +761,10 @@ async function fetchRemote(isInitial){
     const data = body.ledger || { campers:[], expenses:[], groups:[], visits:[] };
     currency = data.currency || '$';
     if(Array.isArray(data.settlements)) settlements = data.settlements;
-    const json = JSON.stringify({ campers: data.campers, expenses: data.expenses, groups: data.groups, settlements: data.settlements, currency: data.currency });
+    archived = !!data.archived;
+    archivedAt = data.archivedAt || null;
+    archivedBy = data.archivedBy || null;
+    const json = JSON.stringify({ campers: data.campers, expenses: data.expenses, groups: data.groups, settlements: data.settlements, currency: data.currency, archived: data.archived, archivedAt: data.archivedAt, archivedBy: data.archivedBy });
     if(json !== lastRemoteJson){
       campers = (data.campers || []).map(c => typeof c === 'string' ? { name: c, photo: null } : c);
       expenses = data.expenses || [];
@@ -794,7 +845,7 @@ async function pushRemote(useBeacon){
     pendingDeletedGroupIds.clear();
     saveLocalCache();
 
-    const payload = { campers, expenses, groups, visits, settlements, currency, lastModified: stampNow() };
+    const payload = { campers, expenses, groups, visits, settlements, currency, archived, archivedAt, archivedBy, lastModified: stampNow() };
     const body = JSON.stringify(payload);
 
     if(useBeacon){
@@ -808,7 +859,7 @@ async function pushRemote(useBeacon){
       body
     });
     if(!res.ok) throw new Error('save failed (' + res.status + ')');
-    lastRemoteJson = JSON.stringify({ campers, expenses, groups, settlements, currency });
+    lastRemoteJson = JSON.stringify({ campers, expenses, groups, settlements, currency, archived, archivedAt, archivedBy });
     lastModified = payload.lastModified;
     renderLastChange();
     renderAll();
@@ -886,6 +937,7 @@ function renderLockUI(){
   if(accessLevel === 'edit'){
     wrap.innerHTML = `
       <span class="lock-badge leader">✏️ Editing unlocked</span>
+      ${archived ? '<span class="lock-badge archived-badge">🗄 Archived</span>' : ''}
       <button class="ghost small" id="relockBtn">Lock</button>
     `;
     document.getElementById('relockBtn').addEventListener('click', () => doLock());
@@ -938,7 +990,10 @@ function bindUnlockForm(){
       if(Array.isArray(data.visits)) visits = data.visits;
       if(Array.isArray(data.settlements)) settlements = data.settlements;
       currency = data.currency || '$';
-      lastRemoteJson = JSON.stringify({ campers, expenses, groups, settlements, currency });
+      archived = !!data.archived;
+      archivedAt = data.archivedAt || null;
+      archivedBy = data.archivedBy || null;
+      lastRemoteJson = JSON.stringify({ campers, expenses, groups, settlements, currency, archived, archivedAt, archivedBy });
       lastModified = data.lastModified || lastModified;
       saveLocalCache();
       setAccess(level);
@@ -977,30 +1032,83 @@ function doLock(){
 }
 
 /* Hides all the actual ledger content until at least the view password has
-   been entered — the status bar (with the password box) always stays visible. */
+   been entered — the status bar (with the password box) always stays visible.
+   When the camp is archived, only edit (admin) access can see it — a
+   view-level visitor sees an "archived" message instead of the ledger. */
 function renderGate(){
   const gate = document.getElementById('viewGate');
   const main = document.getElementById('mainContent');
   const mobileBar = document.querySelector('.mobile-bar');
-  const canView = accessLevel !== 'none';
+  const loggedIn = accessLevel !== 'none';
+  const archivedForThisUser = archived && accessLevel !== 'edit';
+  const canView = loggedIn && !archivedForThisUser;
   if(gate){
     gate.classList.toggle('js-hidden', canView);
     const h2 = gate.querySelector('h2');
     const sub = gate.querySelector('.sub');
-    if(h2) h2.textContent = '🔒 Password required';
-    if(sub) sub.textContent = "This trip's ledger is private. Enter the password in the bar above to view it.";
+    if(archivedForThisUser){
+      if(h2) h2.textContent = '🗄 Archived';
+      if(sub) sub.textContent = 'This camp has been archived and is only viewable by the admin.';
+    } else {
+      if(h2) h2.textContent = '🔒 Password required';
+      if(sub) sub.textContent = "This trip's ledger is private. Enter the password in the bar above to view it.";
+    }
   }
   if(main) main.classList.toggle('js-hidden', !canView);
   if(mobileBar) mobileBar.classList.toggle('js-hidden', !(canView && unlocked));
+  const banner = document.getElementById('archiveBanner');
+  if(banner){
+    banner.classList.toggle('js-hidden', !archived);
+    if(archived){
+      const meta = document.getElementById('archiveMeta');
+      if(meta) meta.textContent = archivedAt ? `Archived ${timeAgo(archivedAt)}${archivedBy ? ' by ' + archivedBy : ''} — only you (admin) can see this.` : 'Only you (admin) can see this.';
+    }
+  }
+  const adminCard = document.getElementById('adminCard');
+  if(adminCard) adminCard.style.display = isLeader ? 'block' : 'none';
+  const archiveBtn = document.getElementById('archiveToggleBtn');
+  if(archiveBtn) archiveBtn.textContent = archived ? '📂 Unarchive this camp' : '🗄 Archive this camp';
 }
 
-/* ---------- Visitor Log (edit access only) ---------- */
+function toggleArchive(){
+  if(!isLeader) return;
+  if(archived){
+    const ok = confirm('Unarchive this camp? It will become visible to everyone with the view password again.');
+    if(!ok) return;
+    archived = false; archivedAt = null; archivedBy = null;
+  } else {
+    const ok = confirm('Archive this camp? It will be hidden from everyone except the admin (edit-access) password until unarchived.');
+    if(!ok) return;
+    archived = true; archivedAt = new Date().toISOString(); archivedBy = getDeviceLabel();
+  }
+  pushRemote();
+  renderAll();
+}
+document.getElementById('archiveToggleBtn').addEventListener('click', toggleArchive);
+
+/* ---------- Visitor Log (edit access only, collapsible) ---------- */
+function isVisitorLogCollapsed(){
+  return localStorage.getItem(VISITOR_LOG_COLLAPSE_KEY) !== '0'; // collapsed by default
+}
+document.getElementById('visitorLogCollapseBtn').addEventListener('click', () => {
+  const collapsedNow = isVisitorLogCollapsed();
+  localStorage.setItem(VISITOR_LOG_COLLAPSE_KEY, collapsedNow ? '0' : '1');
+  applyVisitorLogCollapseState();
+});
+function applyVisitorLogCollapseState(){
+  const collapsed = isVisitorLogCollapsed();
+  const list = document.getElementById('visitorLogList');
+  const btn = document.getElementById('visitorLogCollapseBtn');
+  if(list) list.classList.toggle('js-hidden', collapsed);
+  if(btn) btn.textContent = collapsed ? '▸ Expand' : '▾ Collapse';
+}
 function renderVisitorLog(){
   const card = document.getElementById('visitorLogCard');
   const list = document.getElementById('visitorLogList');
   if(!card || !list) return;
   card.style.display = isLeader ? 'block' : 'none';
   if(!isLeader) return;
+  applyVisitorLogCollapseState();
   if(visits.length === 0){
     list.innerHTML = '<div class="empty">No visits recorded yet.</div>';
     return;
@@ -1401,6 +1509,7 @@ function resetExpenseForm(){
   document.getElementById('paidByInput').value = '';
   document.getElementById('categoryInput').value = '';
   { const _cc = document.getElementById('customCategoryInput'); if(_cc){ _cc.style.display='none'; _cc.value=''; } }
+  { const _n = document.getElementById('noteInput'); if(_n){ _n.value=''; } }
   document.getElementById('quickSplitSelect').value = '';
   splitMode = 'equal';
   document.getElementById('splitEqualBtn').classList.add('active');
@@ -1426,6 +1535,7 @@ function startEditExpense(id){
   document.getElementById('categoryInput').value = e.category || '';
   document.getElementById('customCategoryInput').style.display = 'none';
   document.getElementById('customCategoryInput').value = '';
+  document.getElementById('noteInput').value = e.note || '';
 
   const shareVals = Object.values(e.shares);
   const isEqual = shareVals.length > 0 && shareVals.every(v => Math.abs(v - shareVals[0]) < 0.01) &&
@@ -1459,6 +1569,7 @@ document.getElementById('addExpenseBtn').addEventListener('click', () => {
   const paidBy = document.getElementById('paidByInput').value;
   let cat = document.getElementById('categoryInput').value;
   if(cat === '__custom__'){ cat = document.getElementById('customCategoryInput').value.trim(); }
+  const note = document.getElementById('noteInput').value.trim();
 
   if(!desc){ statusEl.textContent = 'Add a description for this expense.'; return; }
   if(!paidBy){ statusEl.textContent = 'Choose who paid.'; return; }
@@ -1498,6 +1609,7 @@ document.getElementById('addExpenseBtn').addEventListener('click', () => {
         amount: amount,
         paidBy: paidBy,
         category: cat,
+        note: note,
         shares: shares,
         editedBy: getDeviceLabel(),
         editedAt: new Date().toISOString()
@@ -1512,6 +1624,7 @@ document.getElementById('addExpenseBtn').addEventListener('click', () => {
       amount: amount,
       paidBy: paidBy,
       category: cat,
+      note: note,
       shares: shares,
       date: new Date().toISOString(),
       addedBy: getDeviceLabel()
@@ -1522,6 +1635,7 @@ document.getElementById('addExpenseBtn').addEventListener('click', () => {
     document.getElementById('categoryInput').value = '';
     document.getElementById('customCategoryInput').style.display = 'none';
     document.getElementById('customCategoryInput').value = '';
+    document.getElementById('noteInput').value = '';
     statusEl.textContent = '';
     clearDraft();
   }
@@ -1552,6 +1666,15 @@ function deleteExpense(id){
   renderAll();
 }
 
+/* Per-expense note view is toggled independently for each receipt row,
+   tracked here so re-renders (e.g. after a poll refresh) don't collapse
+   a note the person just opened. */
+let openNoteIds = new Set();
+function toggleNote(id){
+  if(openNoteIds.has(id)) openNoteIds.delete(id); else openNoteIds.add(id);
+  renderReceipts();
+}
+
 function renderReceipts(){
   const list = document.getElementById('receiptsList');
   document.getElementById('expenseCount').textContent = expenses.length;
@@ -1567,6 +1690,9 @@ function renderReceipts(){
       : `split with ${splitNames.join(', ')}`;
     let metaLine = e.addedBy ? `logged by ${escapeHtml(e.addedBy)} · ${timeAgo(e.date)}` : timeAgo(e.date);
     if(e.editedBy){ metaLine += ` · edited by ${escapeHtml(e.editedBy)} ${timeAgo(e.editedAt)}`; }
+    const hasNote = e.note && e.note.trim();
+    const noteOpen = openNoteIds.has(e.id);
+    const noteHtml = hasNote && noteOpen ? `<div class="receipt-note">${escapeHtml(e.note)}</div>` : '';
     return `
     <div class="receipt">
       <div class="receipt-left">
@@ -1579,9 +1705,11 @@ function renderReceipts(){
       </div>
       <div class="receipt-actions">
         <div class="receipt-amt">${currency}${e.amount.toFixed(2)}</div>
+        ${hasNote ? `<button class="receipt-note-btn" onclick="toggleNote('${e.id}')" title="${noteOpen ? 'Hide note' : 'Show note'}">${noteOpen ? '📖' : '📝'}</button>` : ''}
         ${unlocked ? `<button class="receipt-edit" onclick="startEditExpense('${e.id}')" title="Edit expense">✎</button>
         <button class="receipt-del" onclick="deleteExpense('${e.id}')" title="Delete expense">✕</button>` : ''}
       </div>
+      ${noteHtml}
     </div>`;
   }).join('');
   renderCatSummary();
@@ -1739,12 +1867,12 @@ function unmarkSettled(id){
 
 function csvCell(v){ v = (v==null?'':String(v)); return '"' + v.replace(/"/g,'""') + '"'; }
 function downloadCSV(){
-  const rows = [['Date','Item','Category','Paid by','Amount','Split among','Each owes']];
+  const rows = [['Date','Item','Category','Paid by','Amount','Split among','Each owes','Note']];
   [...expenses].sort((a,b)=> new Date(a.date)-new Date(b.date)).forEach(e => {
     const names = Object.keys(e.shares || {}).join('; ');
     const each = Object.entries(e.shares || {}).map(([n,v]) => n+': '+currency+Number(v).toFixed(2)).join('; ');
     const d = e.date ? new Date(e.date).toLocaleDateString() : '';
-    rows.push([d, e.description||'', e.category||'', e.paidBy||'', currency+Number(e.amount).toFixed(2), names, each]);
+    rows.push([d, e.description||'', e.category||'', e.paidBy||'', currency+Number(e.amount).toFixed(2), names, each, e.note||'']);
   });
   const bal = computeBalances();
   rows.push([]); rows.push(['Balances']);
@@ -1790,6 +1918,70 @@ function printSummary(){
     + '<button onclick="window.print()" style="margin-top:20px;padding:8px 16px;">Print</button>'
     + '</body></html>');
   w.document.close();
+}
+
+/* ---------- Full-page PDF (keeps photos & colors) ----------
+   Renders the visible page to a canvas with html2canvas (same engine as the
+   screenshot button), then slices that canvas across as many A4 pages as
+   needed and drops each slice into a PDF with jsPDF — so avatars, category
+   chips, and the dark theme all come through instead of a plain text dump. */
+document.getElementById('fullPdfBtn').addEventListener('click', savePageAsPdf);
+function savePageAsPdf(){
+  const statusEl = document.getElementById('syncStatus');
+  if(typeof html2canvas === 'undefined'){
+    statusEl.textContent = 'PDF tool failed to load — check your internet connection and try again.';
+    return;
+  }
+  const jsPDFRef = window.jspdf && window.jspdf.jsPDF;
+  if(!jsPDFRef){
+    statusEl.textContent = 'PDF tool failed to load — check your internet connection and try again.';
+    return;
+  }
+  const target = document.querySelector('.wrap');
+  const btn = document.getElementById('fullPdfBtn');
+  const original = btn.textContent;
+  btn.textContent = 'Building PDF...';
+  btn.disabled = true;
+  html2canvas(target, {
+    backgroundColor: '#0B0B0D',
+    useCORS: true,
+    scale: 2
+  }).then(canvas => {
+    const pdf = new jsPDFRef({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    const pxPerPage = Math.floor((pageHeight * canvas.width) / imgWidth);
+
+    let renderedHeightPx = 0;
+    let first = true;
+    while(renderedHeightPx < canvas.height){
+      const sliceHeightPx = Math.min(pxPerPage, canvas.height - renderedHeightPx);
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = canvas.width;
+      sliceCanvas.height = sliceHeightPx;
+      const ctx = sliceCanvas.getContext('2d');
+      ctx.fillStyle = '#0B0B0D';
+      ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+      ctx.drawImage(canvas, 0, renderedHeightPx, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+      const sliceImg = sliceCanvas.toDataURL('image/png');
+      const sliceImgHeight = (sliceHeightPx * imgWidth) / canvas.width;
+      if(!first) pdf.addPage();
+      pdf.addImage(sliceImg, 'PNG', 0, 0, imgWidth, sliceImgHeight);
+      renderedHeightPx += sliceHeightPx;
+      first = false;
+    }
+
+    const stamp = new Date().toISOString().slice(0,10);
+    pdf.save(`jumbo-camp-${stamp}.pdf`);
+    btn.textContent = original;
+    btn.disabled = false;
+  }).catch(err => {
+    statusEl.textContent = 'PDF export failed: ' + err.message;
+    btn.textContent = original;
+    btn.disabled = false;
+  });
 }
 
 /* ---------- Draft autosave (protects against navigating away mid-entry) ---------- */
